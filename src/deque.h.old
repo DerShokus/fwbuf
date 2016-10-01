@@ -1,0 +1,255 @@
+/*
+ * deque.h
+ * Copyright (C) 2016 dershokus <lily.coder@gmail.com>
+ *
+ * Distributed under terms of the MIT license.
+ */
+
+#ifndef DEQUE_H
+#define DEQUE_H
+
+#include <stdlib.h>
+#include <assert.h>
+#include <string.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+struct deque_buffer_node {
+        struct deque_buffer_node *next;
+        uint8_t *position;
+        uint8_t chunk[1]; // actually it's greater then one
+};
+
+struct deque_buffer {
+        struct deque_buffer_node *head;
+        struct deque_buffer_node *end;
+        const size_t chunk_size;
+        size_t node_count;
+};
+
+struct deque_iterator {
+        struct deque_buffer *container;
+        struct deque_buffer_node *node;
+        uint8_t *position;
+};
+
+struct deque_buffer_node *deque_buffer_node_next(struct deque_buffer_node *node)
+{
+        return node ? node->next : NULL;
+}
+
+bool check_position(struct deque_buffer *buffer, struct deque_buffer_node *node,
+                    uint8_t *position)
+{
+        if (buffer == NULL || node == NULL || position == NULL)
+                return false;
+
+        const size_t chunk_size = buffer->chunk_size;
+        const uint8_t *chunk    = node->chunk;
+
+        if (chunk > position || position > (chunk + chunk_size))
+                return false;
+
+        return true;
+}
+
+void deque_node_write(struct deque_buffer_node *node, uint8_t *position,
+                      void *data, size_t size)
+{
+    assert(node->chunk <= position);
+    
+    memcpy(position, data, size);
+
+    if ((position + size) > node->position)
+      node->position = position + size;
+}
+
+size_t deque_node_space(struct deque_buffer *buffer, struct deque_buffer_node *node, uint8_t *position)
+{
+  size_t size = buffer->chunk_size;
+  uint8_t *end = node->chunk + size;
+  ptrdiff_t space = position - end;
+  assert(space >= 0);
+  return space;
+}
+
+
+struct deque_buffer *deque_buffer_create(size_t chunk_size)
+{
+        assert(chunk_size > 0);
+        struct deque_buffer init = {.head       = NULL,
+                                    .end        = NULL,
+                                    .chunk_size = chunk_size,
+                                    .node_count = 0};
+        struct deque_buffer *res = malloc(sizeof(init));
+        if (res == NULL)
+                return NULL;
+        memcpy(res, &init, sizeof(init));
+
+        return res;
+}
+
+struct deque_buffer_node *deque_buffer_node_create(struct deque_buffer *deque)
+{
+        const size_t node_size =
+            sizeof(struct deque_buffer_node) + (deque->chunk_size - 1);
+        struct deque_buffer_node *node = malloc(node_size);
+        if (node == NULL)
+                return NULL;
+
+        node->position = node->chunk;
+        node->next     = NULL;
+
+        if (deque->end == NULL) {
+                deque->head = deque->end = node;
+        } else {
+                deque->end->next = node;
+                deque->end       = node;
+        }
+
+        ++deque->node_count;
+
+        return node;
+}
+
+struct deque_buffer_node *deque_buffer_node_last(struct deque_buffer *deque)
+{
+        assert(deque != NULL);
+
+        if (deque->head == NULL) {
+                assert(deque->head == deque->end);
+                deque_buffer_node_create(deque);
+        }
+        if (deque->head == NULL) {
+                return NULL;
+        }
+        assert(deque->end != NULL);
+        return deque->end;
+}
+
+size_t deque_buffer_node_space(struct deque_buffer *deque,
+                               struct deque_buffer_node *node)
+{
+        assert(deque != NULL);
+        assert(node != NULL);
+
+        const size_t filled = node->position - node->chunk;
+        return deque->chunk_size - filled;
+}
+
+void deque_buffer_node_push_back(struct deque_buffer_node *node, void *data,
+                                 size_t size)
+{
+        assert(node != NULL);
+        assert(data != NULL);
+
+        if (size == 0)
+                return;
+        memcpy(node->position, data, size);
+        node->position += size;
+}
+
+size_t min_sz(size_t a, size_t b) { return a > b ? b : a; }
+
+void deque_buffer_push_back(struct deque_buffer *deque, void *data,
+                            size_t data_size)
+{
+        assert(deque != NULL);
+        assert(data != NULL);
+        uint8_t *bytes = data;
+        if (data_size == 0)
+                return;
+
+        struct deque_buffer_node *node = deque_buffer_node_last(deque);
+
+        while (data_size) {
+
+                if (deque_buffer_node_space(deque, node) == 0) {
+                        node = deque_buffer_node_create(deque);
+                }
+                // is enough of space?
+                const size_t push_size =
+                    min_sz(data_size, deque_buffer_node_space(deque, node));
+                deque_buffer_node_push_back(node, bytes, push_size);
+                data_size -= push_size;
+                bytes += push_size;
+        }
+}
+
+size_t deque_buffer_buffered_size(struct deque_buffer *deque)
+{
+        assert(deque != NULL);
+        return deque->chunk_size * deque->node_count;
+}
+
+struct deque_buffer_node *deque_buffer_node_first(struct deque_buffer *deque)
+{
+        return deque->head;
+}
+
+size_t deque_buffer_node_filled(struct deque_buffer_node *node)
+{
+        return node->position - node->chunk;
+}
+
+void *deque_buffer_bufferize(struct deque_buffer *deque)
+{
+        assert(deque != NULL);
+
+        const size_t buffer_size = deque_buffer_buffered_size(deque);
+        void *buffer             = malloc(buffer_size);
+        if (buffer == NULL)
+                return NULL;
+
+        uint8_t *p = buffer;
+        for (struct deque_buffer_node *node = deque_buffer_node_first(deque);
+             node != NULL; node             = deque_buffer_node_next(node)) {
+                memcpy(p, node->chunk, deque_buffer_node_filled(node));
+                p += deque_buffer_node_filled(node);
+        }
+        // assert((p - (uint8_t*)buffer) == buffer_size);
+        return buffer;
+}
+
+void deque_write(struct deque_buffer *buffer, struct deque_buffer_node *node,
+                 uint8_t *position, void *data, size_t size)
+{
+        assert(buffer != NULL);
+        assert(node != NULL);
+        assert(data != NULL);
+        assert(size != 0);
+        assert(position != NULL);
+        assert(position >= node->chunk);
+
+        uint8_t *data_b = data;
+        while (size > 0) {
+            size_t portion = deque_node_space(buffer, node, position);
+            deque_node_write(node, position, data_b, portion);
+            size -= portion;
+            node = deque_buffer_node_next(node);
+            data_b += portion;
+            if (node == NULL)
+            {
+              deque_buffer_push_back(buffer, data_b, size);
+              return;
+            }
+            position = node->chunk;
+        }
+}
+
+bool deque_update(struct deque_iterator *iterator, void *data, size_t size)
+{
+        if (iterator == NULL || data == NULL || iterator->node == NULL ||
+            iterator->container == NULL || iterator->position == NULL)
+                return false;
+        if (size == 0)
+                return true;
+        if (!check_position(iterator->container, iterator->node,
+                            iterator->position))
+                return false;
+        deque_write(iterator->container, iterator->node, iterator->position, data, size);
+
+        return true;
+}
+
+#endif /* !DEQUE_H */
