@@ -31,14 +31,28 @@ struct fwbuf_iterator {
         uint8_t *position;
 };
 
-struct fwbuf *fwbuf_create(size_t chunk_size);
-struct fwbuf_iterator fwbuf_push_back(struct fwbuf *buf, void *data,
-                                      size_t data_size);
-void *fwbuf_pack_up(struct fwbuf *buf);
-size_t fwbuf_packed_size(struct fwbuf *buf);
-bool fwbuf_emplace(struct fwbuf_iterator iterator, void *data, size_t size);
-struct fwbuf_iterator fwbuf_iterator_begin(struct fwbuf *buf);
-struct fwbuf_iterator fwbuf_iterator_next(struct fwbuf_iterator iterator,
-                                          size_t shift);
+struct fwbuf *
+fwbuf_create(size_t chunk_size);
+
+void
+fwbuf_delete(struct fwbuf **buffer);
+
+bool
+fwbuf_push_back(struct fwbuf *buf, void *data, size_t data_size);
+
+void *
+fwbuf_pack_up(struct fwbuf *buf);
+
+size_t
+fwbuf_packed_size(struct fwbuf *buf);
+
+bool
+fwbuf_emplace(struct fwbuf_iterator iterator, void *data, size_t size);
+
+struct fwbuf_iterator
+fwbuf_iterator_begin(struct fwbuf *buf);
+
+struct fwbuf_iterator
+fwbuf_iterator_next(struct fwbuf_iterator iterator, size_t shift);
 
 #endif /* !FWBUF_H */

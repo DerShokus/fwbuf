@@ -82,8 +82,7 @@ int main(void)
 
         struct fwbuf *buf = fwbuf_create(10);
         int64_t the_first = 0;
-        struct fwbuf_iterator iterator =
-            fwbuf_push_back(buf, &the_first, sizeof(the_first));
+        fwbuf_push_back(buf, &the_first, sizeof(the_first));
         for (int64_t i = 1; i < 1000; i++) {
             fwbuf_push_back(buf, &i, sizeof(i));
         }
@@ -94,6 +93,7 @@ int main(void)
                 ++p;
         }
 
+        struct fwbuf_iterator iterator = fwbuf_iterator_begin(buf);
         for (int64_t i = 999; i >= 0; --i)
         {
             fwbuf_emplace(iterator, &i, sizeof(i));

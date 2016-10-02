@@ -99,19 +99,16 @@ bool fwbuf_node_full(struct fwbuf *buf, struct fwbuf_node *node)
 
 size_t min_sz(size_t a, size_t b) { return a > b ? b : a; }
 
-struct fwbuf_iterator fwbuf_push_back(struct fwbuf *buf, void *data,
-                                      size_t data_size)
+bool fwbuf_push_back(struct fwbuf *buf, void *data, size_t data_size)
 {
         assert(buf != NULL);
         assert(data != NULL);
 
         struct fwbuf_node *node        = fwbuf_node_last(buf);
-        struct fwbuf_iterator iterator = {
-            .container = buf, .node = node, .position = node->position};
 
         uint8_t *bytes = data;
         if (data_size == 0)
-                return iterator;
+                return false;
 
         while (data_size) {
                 // create new node if the last one is full
@@ -127,7 +124,7 @@ struct fwbuf_iterator fwbuf_push_back(struct fwbuf *buf, void *data,
                 data_size -= push_size;
                 bytes += push_size;
         }
-        return iterator;
+        return true;
 }
 
 bool fwbuf_iterator_valid(struct fwbuf_iterator iterator)
@@ -162,9 +159,7 @@ bool fwbuf_emplace(struct fwbuf_iterator iterator, void *data, size_t size)
                         bytes += write.size;
                         size -= write.size;
                 } else {
-                        iterator =
-                            fwbuf_push_back(iterator.container, bytes, size);
-                        return fwbuf_iterator_valid(iterator);
+                        return fwbuf_push_back(iterator.container, bytes, size);
                 }
         }
 
@@ -268,4 +263,18 @@ struct fwbuf_iterator fwbuf_iterator_begin(struct fwbuf *buf)
     iterator.position  = buf->head->chunk;
 
     return iterator;
+}
+
+void
+fwbuf_delete(struct fwbuf **buffer) {
+    if (buffer && *buffer) {
+        struct fwbuf_node *node = fwbuf_node_first(*buffer);
+        do {
+            struct fwbuf_node *sentenced = node;
+            node = fwbuf_node_next(node);
+            free(sentenced);
+        } while (node);
+        free(*buffer);
+        *buffer = NULL;
+    }
 }
